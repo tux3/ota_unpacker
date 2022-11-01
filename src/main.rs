@@ -2,6 +2,7 @@ mod archive;
 mod cmd;
 mod extents;
 mod operation;
+mod partition;
 mod payload;
 
 use crate::cmd::extract::extract;
@@ -29,6 +30,8 @@ pub struct ExtractCmd {
     ota_path: PathBuf,
     #[clap(short, long)]
     out_path: Option<PathBuf>,
+    #[clap(long)]
+    no_verify: bool,
 }
 
 #[tokio::main]
