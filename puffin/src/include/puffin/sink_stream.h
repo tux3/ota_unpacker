@@ -36,6 +36,8 @@ class SinkStream : public StreamInterface {
   // The current offset.
   uint64_t offset_;
 
+  uint64_t expected_write_offset_;
+
   // True if the stream is open.
   bool open_;
 

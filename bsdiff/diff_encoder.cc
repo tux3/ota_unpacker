@@ -25,7 +25,7 @@ bool DiffEncoder::Init() {
 
 bool DiffEncoder::AddControlEntry(const ControlEntry& entry) {
   if (entry.diff_size > kMaxEncodedUint64Value) {
-    LOG(ERROR) << "Encoding value out of range " << entry.diff_size;
+//    LOG(ERROR) << "Encoding value out of range " << entry.diff_size;
     return false;
   }
 

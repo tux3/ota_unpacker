@@ -24,6 +24,7 @@ SinkStream::SinkStream(const void* userarg, uint64_t(*sink)(const void* userarg,
     : userarg_(userarg),
       sink_(sink),
       offset_(0),
+      expected_write_offset_(0),
       open_(true) {}
 
 bool SinkStream::GetSize(uint64_t* size) const {
@@ -56,8 +57,11 @@ bool SinkStream::Read(void* buffer, size_t length) {
 
 bool SinkStream::Write(const void* buffer, size_t length) {
   TEST_AND_RETURN_FALSE(open_);
+  if (expected_write_offset_ != offset_)
+    abort();
   sink_(userarg_, (const uint8_t*)buffer, length);
   offset_ += length;
+  expected_write_offset_ = offset_;
   return true;
 }
 

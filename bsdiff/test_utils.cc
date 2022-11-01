@@ -37,7 +37,7 @@ bool MakeTempFile(const std::string& base_filename_template,
 
   int mkstemp_fd = mkstemp(result.data());
   if (mkstemp_fd < 0) {
-    PLOG(ERROR) << "mkstemp() Failed";
+//    PLOG(ERROR) << "mkstemp() Failed";
     return false;
   }
   close(mkstemp_fd);
@@ -92,7 +92,7 @@ ScopedTempFile::ScopedTempFile(const std::string& pattern) {
 
 ScopedTempFile::~ScopedTempFile() {
   if (!filename_.empty() && unlink(filename_.c_str()) < 0) {
-    PLOG(ERROR) << "Unable to remove temporary file.";
+//    PLOG(ERROR) << "Unable to remove temporary file.";
   }
 }
 

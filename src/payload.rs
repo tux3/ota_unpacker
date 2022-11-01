@@ -1,13 +1,18 @@
 use crate::operation::apply_op;
-use crate::update_metadata::{DeltaArchiveManifest, InstallOperation, Signatures};
+use crate::partition::verify_part;
+use crate::update_metadata::{DeltaArchiveManifest, InstallOperation, PartitionUpdate, Signatures};
 use anyhow::{bail, Result};
 use byteorder::{ReadBytesExt, BE};
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use protobuf::Message;
-use std::fs::File;
-use std::io::Read;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom};
+use std::ops::DerefMut;
+use std::path::Path;
 use std::sync::{Arc, RwLock};
 use tokio::task::{spawn_blocking, JoinHandle};
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 pub struct Payload<R: Read> {
     blob_pos: u64,
@@ -59,14 +64,88 @@ impl<R: Read> Payload<R> {
         self.manifest.minor_version.unwrap_or(0) != 0
     }
 
+    pub async fn extract_partition(
+        &mut self,
+        mut src: Option<File>,
+        out_path: &Path,
+        part: PartitionUpdate,
+        verify: bool,
+    ) -> Result<()> {
+        let name = part.partition_name.clone().expect("Missing partition name") + ".img";
+
+        if let Some(src) = &mut src {
+            if let Some(info) = part.old_partition_info.0 {
+                if verify {
+                    verify_part(src, &name, &info, true)?;
+                    src.seek(SeekFrom::Start(0))?;
+                }
+            }
+        }
+
+        if let Some(version) = part.version.as_deref() {
+            info!("Extracting {name} (version {version})",);
+        } else {
+            info!("Extracting {name}");
+        }
+        let out = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(out_path.to_owned().join(&name))?;
+        let out = Arc::new(RwLock::new(out));
+
+        let mut futs = FuturesUnordered::new();
+        let fut_limit = (num_cpus::get() as f32 * 1.5) as usize;
+
+        let src = src.map(Arc::new);
+        for op in part.operations {
+            let handle = self
+                .spawn_apply_install_op(op, src.clone(), out.clone())
+                .await?;
+            futs.push(handle);
+            if futs.len() >= fut_limit {
+                futs.next().await.unwrap()??;
+            }
+        }
+        while !futs.is_empty() {
+            futs.next().await.unwrap()??;
+        }
+
+        if let Some(extent) = &part.hash_tree_extent.0 {
+            let start = extent.start_block() as usize * self.manifest.block_size() as usize;
+            let end = start + extent.num_blocks() as usize * self.manifest.block_size() as usize;
+            warn!(
+                "Partition requires Verity {} hash tree from {start:x} to {end:x} (unimplemented)",
+                part.hash_tree_algorithm.unwrap()
+            )
+            // TODO: Re-create verity hash tree
+        }
+        if let Some(extent) = &part.fec_extent.0 {
+            let start = extent.start_block() as usize * self.manifest.block_size() as usize;
+            let end = start + extent.num_blocks() as usize * self.manifest.block_size() as usize;
+            warn!("Partition requires FEC (Reed-Solomon) from {start:x} to {end:x} (unimplemented)")
+            // TODO: Re-create FEC data
+        }
+
+        if let Some(info) = part.new_partition_info.0 {
+            if verify {
+                let mut out_guard = out.write().unwrap();
+                verify_part(out_guard.deref_mut(), &name, &info, false)?;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn spawn_apply_install_op(
         &mut self,
         op: InstallOperation,
+        src: Option<Arc<File>>,
         out: Arc<RwLock<File>>,
     ) -> Result<JoinHandle<Result<()>>> {
         let off = op.data_offset();
         let len = op.data_length();
-        if off != self.blob_pos {
+        if off != self.blob_pos && len != 0 {
             bail!(
                 "Install operation at position {off}, but our cursor is still at {}",
                 self.blob_pos
@@ -77,7 +156,7 @@ impl<R: Read> Payload<R> {
         self.blob_pos += len;
 
         let block_size = self.manifest.block_size() as usize;
-        let handle = spawn_blocking(move || apply_op(block_size, op, data, out));
+        let handle = spawn_blocking(move || apply_op(block_size, op, data, src, out));
         Ok(handle)
     }
 }

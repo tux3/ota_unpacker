@@ -18,13 +18,13 @@ BrotliCompressor::BrotliCompressor(int quality) : comp_buffer_(kBufferSize) {
   brotli_encoder_state_ =
       BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
   if (!brotli_encoder_state_) {
-    LOG(ERROR) << "Failed to initialize brotli decoder state";
+//    LOG(ERROR) << "Failed to initialize brotli decoder state";
   } else {
     int compression_quality = quality;
     if (compression_quality > BROTLI_MAX_QUALITY ||
         compression_quality < BROTLI_MIN_QUALITY) {
-      LOG(ERROR) << "Invalid quality value: " << quality
-                 << ", using default quality instead.";
+//      LOG(ERROR) << "Invalid quality value: " << quality
+//                 << ", using default quality instead.";
       compression_quality = BROTLI_MAX_QUALITY;
     }
 

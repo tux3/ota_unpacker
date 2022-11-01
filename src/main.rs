@@ -1,10 +1,13 @@
 mod archive;
+mod bspatch;
 mod cmd;
 mod extents;
 mod operation;
 mod partition;
 mod payload;
+mod puffpatch;
 
+use crate::cmd::apply::apply;
 use crate::cmd::extract::extract;
 use anyhow::Result;
 use clap::Parser;
@@ -23,13 +26,27 @@ struct Args {
 #[derive(clap::Subcommand)]
 enum Command {
     Extract(ExtractCmd),
+    Apply(ApplyCmd),
 }
 
 #[derive(Parser)]
 pub struct ExtractCmd {
-    ota_path: PathBuf,
+    ota: PathBuf,
     #[clap(short, long)]
-    out_path: Option<PathBuf>,
+    out: Option<PathBuf>,
+    #[clap(long)]
+    no_verify: bool,
+}
+
+#[derive(Parser)]
+pub struct ApplyCmd {
+    /// The new update (diff) OTA to apply
+    ota: PathBuf,
+    /// The path to the extracted previous OTA that this update OTA applies to
+    #[clap(short, long)]
+    previous: PathBuf,
+    #[clap(short, long)]
+    out: Option<PathBuf>,
     #[clap(long)]
     no_verify: bool,
 }
@@ -46,6 +63,7 @@ async fn main() -> Result<()> {
     let cli = Args::parse();
     match cli.command {
         Command::Extract(cmd) => extract(cmd).await?,
+        Command::Apply(cmd) => apply(cmd).await?,
     }
 
     Ok(())
