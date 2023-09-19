@@ -1,3 +1,4 @@
+use crate::hashtree::write_verity_hashtree;
 use crate::operation::apply_op;
 use crate::partition::verify_part;
 use crate::update_metadata::{DeltaArchiveManifest, InstallOperation, PartitionUpdate, Signatures};
@@ -112,14 +113,23 @@ impl<R: Read> Payload<R> {
             futs.next().await.unwrap()??;
         }
 
-        if let Some(extent) = &part.hash_tree_extent.0 {
-            let start = extent.start_block() as usize * self.manifest.block_size() as usize;
-            let end = start + extent.num_blocks() as usize * self.manifest.block_size() as usize;
-            warn!(
-                "Partition requires Verity {} hash tree from {start:x} to {end:x} (unimplemented)",
-                part.hash_tree_algorithm.unwrap()
-            )
-            // TODO: Re-create verity hash tree
+        if let Some(hashtree_extent) = &part.hash_tree_extent.0 {
+            let Some(data_extent) = &part.hash_tree_data_extent.0 else {
+                bail!("Partition has a verity hash tree (output) extent, but no hash tree data (input) extent")
+            };
+            let Some(salt) = &part.hash_tree_salt else {
+                bail!("Partition has a verity hash tree, but is missing a salt for the hash")
+            };
+
+            let mut out_guard = out.write().unwrap();
+            write_verity_hashtree(
+                out_guard.deref_mut(),
+                &self.manifest,
+                &part.hash_tree_algorithm.as_deref().unwrap_or("sha256"),
+                salt.as_ref(),
+                data_extent,
+                hashtree_extent,
+            )?;
         }
         if let Some(extent) = &part.fec_extent.0 {
             let start = extent.start_block() as usize * self.manifest.block_size() as usize;

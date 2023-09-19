@@ -33,11 +33,15 @@ pub async fn apply(
             .clone()
             .expect("Missing partition name")
             + ".img";
+
         let src = File::open(previous.clone().join(&name))
             .with_context(|| format!("Opening previous OTA partition {name}"))?;
-        payload
+        if let Err(e) = payload
             .extract_partition(Some(src), &out_path, partition, !no_verify)
-            .await?;
+            .await
+        {
+            eprintln!("Error extracting {name}: {e}")
+        }
     }
     Ok(())
 }

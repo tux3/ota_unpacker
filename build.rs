@@ -11,6 +11,65 @@ pub fn main() {
 
     make_bspatch();
     make_puffin();
+    make_libavb();
+    make_fec();
+}
+
+fn make_fec() {
+    cc::Build::new()
+        .cpp(true)
+        .files([
+            "fec/libfec/avb_utils.cpp",
+            "fec/libfec/fec_open.cpp",
+            "fec/libfec/fec_process.cpp",
+            "fec/libfec/fec_read.cpp",
+            "fec/libfec/fec_verity.cpp",
+            "fec/ext4_utils/ext4_sb.cpp",
+            "fec/ext4_utils/ext4_utils.cpp",
+            "fec/ext4_utils/wipe.cpp",
+            "fec/squashfs_utils/squashfs_utils.c",
+            "fec/image.cpp",
+            "fec/klog_write_stub.cpp",
+        ])
+        .warnings(false)
+        .flag("-Wno-attributes")
+        .flag("-Wno-deprecated-declarations")
+        .include("/usr/include/android/")
+        .include("fec")
+        .include("fec/libfec/include")
+        .include("fec/ext4_utils/include")
+        .include("fec/squashfs_utils")
+        .include("fec/squashfs-tools")
+        .compile("fec");
+}
+
+fn make_libavb() {
+    cc::Build::new()
+        .cpp(false)
+        .files([
+            "fec/libavb/avb_chain_partition_descriptor.c",
+            "fec/libavb/avb_cmdline.c",
+            "fec/libavb/avb_crc32.c",
+            "fec/libavb/avb_crypto.c",
+            "fec/libavb/avb_descriptor.c",
+            "fec/libavb/avb_footer.c",
+            "fec/libavb/avb_hash_descriptor.c",
+            "fec/libavb/avb_hashtree_descriptor.c",
+            "fec/libavb/avb_kernel_cmdline_descriptor.c",
+            "fec/libavb/avb_property_descriptor.c",
+            "fec/libavb/avb_rsa.c",
+            "fec/libavb/avb_slot_verify.c",
+            "fec/libavb/avb_sysdeps_posix.c",
+            "fec/libavb/avb_util.c",
+            "fec/libavb/avb_vbmeta_image.c",
+            "fec/libavb/avb_version.c",
+            "fec/libavb/sha/sha256_impl.c",
+            "fec/libavb/sha/sha512_impl.c",
+        ])
+        .warnings(false)
+        .define("AVB_COMPILATION", "")
+        .include("fec/libavb/sha")
+        .compile("avb");
 }
 
 fn make_bspatch() {
@@ -40,7 +99,7 @@ fn make_bspatch() {
     println!("cargo:rerun-if-changed=bsdiff/include/bsdiff/bspatch.h");
     println!("cargo:rustc-link-lib=brotlidec");
     let bindings = bindgen::Builder::default()
-        .clang_args(["-x", "c++"])
+        .clang_arg("-xc++")
         .clang_arg("-Ibsdiff/include")
         .allowlist_function(".*bspatch_sink_c.*")
         .header("bsdiff/include/bsdiff/bspatch.h")
