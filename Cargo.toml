@@ -18,7 +18,9 @@ lzma-sys = "0.1.20"
 futures = "0.3.25"
 num_cpus = "1.13.1"
 hex = "0.4.3"
+digest = "0.10.7"
 sha2 = "0.10.7"
+sha1 = "0.10.5"
 
 [build-dependencies]
 protobuf-codegen = "3.2.0"

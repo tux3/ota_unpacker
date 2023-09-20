@@ -1,9 +1,13 @@
 use crate::update_metadata::{DeltaArchiveManifest, Extent};
 use anyhow::{bail, Result};
-use sha2::{Digest, Sha256};
+use digest::DynDigest;
+use sha1::Sha1;
+use sha2::Sha256;
 use std::fs::File;
 use std::io::{BorrowedBuf, Read, Seek, SeekFrom, Write};
 use tracing::{debug, info};
+
+type BoxHasher = Box<dyn DynDigest>;
 
 struct Level {
     pub offset: usize,
@@ -18,9 +22,14 @@ pub fn write_verity_hashtree(
     data_extent: &Extent,
     hashtree_extent: &Extent,
 ) -> Result<()> {
-    if hash_algorithm_name != "sha256" {
-        bail!("Verity hash algorithm {hash_algorithm_name} not supported")
-    }
+    let mut hasher: BoxHasher = match hash_algorithm_name {
+        "sha256" => Box::<Sha256>::default(),
+        "sha1" => Box::<Sha1>::default(),
+        _ => bail!("Verity hash algorithm {hash_algorithm_name} not supported"),
+    };
+    let hash_size = hasher.output_size();
+    let padded_hash_size = hash_size.next_power_of_two();
+    let hash_padding = padded_hash_size - hash_size;
 
     let data_start = data_extent.start_block() as usize * manifest.block_size() as usize;
     let data_end = data_start + data_extent.num_blocks() as usize * manifest.block_size() as usize;
@@ -31,8 +40,7 @@ pub fn write_verity_hashtree(
 
     let image_size = data_end - data_start;
     let block_size = 4096;
-    let hash_size = 32; // Hardcoded for sha256 for now
-    let levels_meta = compute_levels_metadata(image_size, block_size, hash_size);
+    let levels_meta = compute_levels_metadata(image_size, block_size, padded_hash_size);
     let tree_size = levels_meta.iter().fold(0, |a, l| a + l.size);
 
     info!("Computing verity hash tree ({hash_algorithm_name}, size {tree_size})");
@@ -41,11 +49,23 @@ pub fn write_verity_hashtree(
     file.seek(SeekFrom::Start(data_start as u64))?;
     let file_data_extent = file.take((data_end - data_start) as u64);
     let mut levels_data = Vec::new();
-    levels_data.push(hash_level(file_data_extent, block_size, salt)?);
+    levels_data.push(hash_level(
+        file_data_extent,
+        block_size,
+        hasher.as_mut(),
+        hash_padding,
+        salt,
+    )?);
 
     while levels_data.last().unwrap().len() > block_size {
         let prev_level = levels_data.last().unwrap();
-        let new_level_data = hash_level(prev_level.as_slice(), block_size, salt)?;
+        let new_level_data = hash_level(
+            prev_level.as_slice(),
+            block_size,
+            hasher.as_mut(),
+            hash_padding,
+            salt,
+        )?;
         levels_data.push(new_level_data);
     }
 
@@ -57,30 +77,39 @@ pub fn write_verity_hashtree(
     Ok(())
 }
 
-fn hash_level(mut source: impl Read, block_size: usize, salt: &[u8]) -> Result<Vec<u8>> {
+fn hash_level<H>(
+    mut source: impl Read,
+    block_size: usize,
+    hasher: &mut H,
+    hash_padding_size: usize,
+    salt: &[u8],
+) -> Result<Vec<u8>>
+where
+    H: DynDigest + ?Sized,
+{
+    let hash_padding = Vec::from_iter(std::iter::repeat(0).take(hash_padding_size));
     let mut out = Vec::new();
     let mut buf_vec = Vec::with_capacity(block_size);
     let mut buf = BorrowedBuf::from(buf_vec.spare_capacity_mut());
     while source.read_buf_exact(buf.unfilled()).is_ok() {
-        let mut hasher = Sha256::new();
-        hasher.update(salt);
-        hasher.update(buf.filled());
-        let hash = hasher.finalize();
+        DynDigest::update(hasher, salt);
+        DynDigest::update(hasher, buf.filled());
+        let hash = hasher.finalize_reset();
         out.extend_from_slice(&hash);
+        out.extend_from_slice(hash_padding.as_slice());
         buf.clear();
     }
 
     if buf.len() > 0 && buf.len() != block_size {
         let pad_size = block_size - buf.len();
-        let mut hasher = Sha256::new();
-        hasher.update(salt);
-        hasher.update(buf.filled());
+        DynDigest::update(hasher, salt);
+        DynDigest::update(hasher, buf.filled());
         // NOTE: The BorrowedBuf never modified buf_vec.len(), so resize is guaranteed to write zeroes
         //      (even though the data was already initialized, the Vec doesn't know that!)
         buf_vec.resize(pad_size, 0);
-        hasher.update(buf_vec.as_slice());
-        let hash = hasher.finalize();
-        out.extend_from_slice(&hash);
+        DynDigest::update(hasher, buf_vec.as_slice());
+        out.extend_from_slice(&hasher.finalize_reset());
+        out.extend_from_slice(hash_padding.as_slice());
     }
 
     out.resize(round_up_to_multiple(out.len(), block_size), 0);
