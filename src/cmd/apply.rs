@@ -2,7 +2,7 @@ use crate::archive::Archive;
 use crate::ApplyCmd;
 use anyhow::{Context, Result};
 use std::fs::File;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 pub async fn apply(
     ApplyCmd {
@@ -40,7 +40,7 @@ pub async fn apply(
             .extract_partition(Some(src), &out_path, partition, !no_verify)
             .await
         {
-            eprintln!("Error extracting {name}: {e}")
+            error!("Error extracting {name}: {e}")
         }
     }
     Ok(())
