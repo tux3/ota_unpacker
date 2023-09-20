@@ -97,6 +97,14 @@ impl<R: Read> Payload<R> {
             .open(out_path.to_owned().join(&name))?;
         let out = Arc::new(RwLock::new(out));
 
+        let current_max_minor_version = 9;
+        if self.manifest.minor_version() > current_max_minor_version {
+            bail!(
+                "Unsupported OTA minor version {}",
+                self.manifest.minor_version()
+            )
+        }
+
         let mut futs = FuturesUnordered::new();
         let fut_limit = (num_cpus::get() as f32 * 1.5) as usize;
 

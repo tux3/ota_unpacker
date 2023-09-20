@@ -3,7 +3,7 @@ use crate::extents::{copy_extents, read_extent_all, write_extents, zero_extents}
 use crate::puffpatch::puffpatch;
 use crate::update_metadata::install_operation::Type;
 use crate::update_metadata::InstallOperation;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use bzip2::read::BzDecoder;
 use std::fs::File;
 use std::sync::{Arc, RwLock};
@@ -26,6 +26,9 @@ pub fn apply_op(
     src: Option<Arc<File>>,
     out: Arc<RwLock<File>>,
 ) -> Result<()> {
+    if !op.has_type() {
+        bail!("Diff operation without a valid type (or our protobuf definition is too old)");
+    }
     let op_type = op.type_();
     trace!(
         "Install op {:?}, pos {}, len {}",
@@ -37,15 +40,18 @@ pub fn apply_op(
     match op_type {
         Type::REPLACE => apply_replace(block_size, &op, &data, out),
         Type::REPLACE_BZ => apply_replace_bz(block_size, &op, &data, out),
-        Type::MOVE => todo!(),
-        Type::BSDIFF => todo!(),
+        Type::MOVE => bail!("Deprecated MOVE op not implemented"),
+        Type::BSDIFF => bail!("Deprecated BSDIFF op not implemented"),
         Type::SOURCE_COPY => apply_src_copy(block_size, &op, assert_src(src)?, out),
         Type::SOURCE_BSDIFF => apply_src_bsdiff(block_size, &op, &data, assert_src(src)?, out),
         Type::REPLACE_XZ => apply_replace_xz(block_size, &op, &data, out),
         Type::ZERO => apply_zeroes(block_size, &op, out),
-        Type::DISCARD => todo!(),
+        Type::DISCARD => bail!("DISCARD op not implemented"),
         Type::BROTLI_BSDIFF => apply_src_bsdiff(block_size, &op, &data, assert_src(src)?, out),
         Type::PUFFDIFF => apply_puffdiff(block_size, &op, &data, assert_src(src)?, out),
+        Type::ZUCCHINI => bail!("ZUCCHINI op not implemented"),
+        Type::LZ4DIFF_BSDIFF => bail!("LZ4DIFF_BSDIFF op not implemented"),
+        Type::LZ4DIFF_PUFFDIFF => bail!("LZ4DIFF_PUFFDIFF op not implemented"),
     }
 }
 

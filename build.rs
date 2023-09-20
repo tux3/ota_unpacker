@@ -2,6 +2,7 @@ use std::env;
 use std::path::PathBuf;
 
 pub fn main() {
+    println!("cargo:rerun-if-changed=src/proto/update_metadata.proto");
     protobuf_codegen::Codegen::new()
         .pure()
         .include("src/proto")
