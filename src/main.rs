@@ -4,6 +4,7 @@ mod archive;
 mod bspatch;
 mod cmd;
 mod extents;
+mod fec;
 mod hashtree;
 mod operation;
 mod partition;

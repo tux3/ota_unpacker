@@ -63,7 +63,7 @@ void image_free(image *ctx)
     image_init(ctx);
 }
 
-static void calculate_rounds(uint64_t size, image *ctx)
+void calculate_rounds(uint64_t size, image *ctx)
 {
     if (!size) {
         FATAL("empty file?\n");
@@ -77,7 +77,7 @@ static void calculate_rounds(uint64_t size, image *ctx)
     ctx->rounds = fec_div_round_up(ctx->blocks, ctx->rs_n);
 }
 
-static int process_chunk(void *priv, const void *data, size_t len)
+int process_chunk(void *priv, const void *data, size_t len)
 {
     image *ctx = (image *)priv;
 
@@ -89,7 +89,7 @@ static int process_chunk(void *priv, const void *data, size_t len)
     return 0;
 }
 
-static void file_image_load(const std::vector<int>& fds, image *ctx)
+void file_image_load(const std::vector<int>& fds, image *ctx)
 {
     uint64_t size = 0;
     std::vector<struct sparse_file *> files;

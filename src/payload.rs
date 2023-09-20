@@ -1,3 +1,4 @@
+use crate::fec::write_verity_fec;
 use crate::hashtree::write_verity_hashtree;
 use crate::operation::apply_op;
 use crate::partition::verify_part;
@@ -13,7 +14,7 @@ use std::ops::DerefMut;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use tokio::task::{spawn_blocking, JoinHandle};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 pub struct Payload<R: Read> {
     blob_pos: u64,
@@ -131,11 +132,20 @@ impl<R: Read> Payload<R> {
                 hashtree_extent,
             )?;
         }
-        if let Some(extent) = &part.fec_extent.0 {
-            let start = extent.start_block() as usize * self.manifest.block_size() as usize;
-            let end = start + extent.num_blocks() as usize * self.manifest.block_size() as usize;
-            warn!("Partition requires FEC (Reed-Solomon) from {start:x} to {end:x} (unimplemented)")
-            // TODO: Re-create FEC data
+        if let Some(fec_extent) = &part.fec_extent.0 {
+            let Some(data_extent) = &part.fec_data_extent.0 else {
+                bail!("Partition has a verity hash tree (output) extent, but no hash tree data (input) extent")
+            };
+            let fec_roots = part.fec_roots.unwrap_or(2);
+
+            let mut out_guard = out.write().unwrap();
+            write_verity_fec(
+                out_guard.deref_mut(),
+                &self.manifest,
+                fec_roots,
+                data_extent,
+                fec_extent,
+            )?;
         }
 
         if let Some(info) = part.new_partition_info.0 {
