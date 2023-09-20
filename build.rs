@@ -13,6 +13,60 @@ pub fn main() {
     make_puffin();
     make_libavb();
     make_fec();
+    make_sparse();
+    make_libbase();
+}
+
+fn make_libbase() {
+    cc::Build::new()
+        .cpp(true)
+        .files([
+            "fec/libbase/abi_compatibility.cpp",
+            "fec/libbase/chrono_utils.cpp",
+            "fec/libbase/cmsg.cpp",
+            "fec/libbase/file.cpp",
+            "fec/libbase/hex.cpp",
+            "fec/libbase/logging.cpp",
+            "fec/libbase/mapped_file.cpp",
+            "fec/libbase/parsebool.cpp",
+            "fec/libbase/parsenetaddress.cpp",
+            "fec/libbase/posix_strerror_r.cpp",
+            "fec/libbase/process.cpp",
+            "fec/libbase/properties.cpp",
+            "fec/libbase/stringprintf.cpp",
+            "fec/libbase/strings.cpp",
+            "fec/libbase/threads.cpp",
+            "fec/libbase/test_utils.cpp",
+        ])
+        .warnings(false)
+        .flag("-Wno-attributes")
+        .flag("-Wno-ignored-attributes")
+        .define("__builtin_available(a,b)", "0")
+        .include("fec/libbase/include")
+        .include("fec/liblog/include")
+        .compile("android_libbase");
+}
+
+fn make_sparse() {
+    cc::Build::new()
+        .cpp(true)
+        .files([
+            "fec/libsparse/append2simg.cpp",
+            "fec/libsparse/backed_block.cpp",
+            "fec/libsparse/img2simg.cpp",
+            "fec/libsparse/output_file.cpp",
+            "fec/libsparse/simg2img.cpp",
+            "fec/libsparse/sparse.cpp",
+            "fec/libsparse/sparse_crc32.cpp",
+            "fec/libsparse/sparse_err.cpp",
+            "fec/libsparse/sparse_fuzzer.cpp",
+            "fec/libsparse/sparse_read.cpp",
+        ])
+        .warnings(false)
+        .flag("-Wno-attributes")
+        .include("fec/libsparse/include")
+        .include("fec/libbase/include")
+        .compile("android_sparse");
 }
 
 fn make_fec() {
@@ -30,17 +84,41 @@ fn make_fec() {
             "fec/squashfs_utils/squashfs_utils.c",
             "fec/image.cpp",
             "fec/klog_write_stub.cpp",
+            "fec/encode_simple.cpp",
         ])
         .warnings(false)
         .flag("-Wno-attributes")
         .flag("-Wno-deprecated-declarations")
-        .include("/usr/include/android/")
+        .include("fec/libsparse/include")
+        .include("fec/libbase/include")
         .include("fec")
         .include("fec/libfec/include")
         .include("fec/ext4_utils/include")
         .include("fec/squashfs_utils")
         .include("fec/squashfs-tools")
-        .compile("fec");
+        .compile("android_fec");
+
+    // This one is the upstream libfec (not ours, not android's)
+    println!("cargo:rustc-link-lib=fec");
+
+    println!("cargo:rerun-if-changed=fec/encode_simple.h");
+    println!("cargo:rerun-if-changed=fec/encode_simple.cpp");
+    let bindings = bindgen::Builder::default()
+        .clang_args(["-x", "c++"])
+        .clang_arg("-Ifec")
+        .clang_arg("-DINCLUDE_IMAGE_STRUCT_ONLY")
+        .allowlist_function(".*encode_simple.*")
+        .header("fec/encode_simple.h")
+        // Tell cargo to invalidate the built crate whenever any of the
+        // included header files changed.
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .generate()
+        .expect("Unable to generate fec_encode_simple bindings");
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join("fec_encode_simple.rs"))
+        .expect("Couldn't write fec_encode_simple bindings!");
 }
 
 fn make_libavb() {

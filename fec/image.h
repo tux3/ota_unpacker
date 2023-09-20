@@ -17,6 +17,11 @@
 #ifndef __FEC_H__
 #define __FEC_H__
 
+#include <cstddef>
+#include <cstdint>
+
+#ifndef INCLUDE_IMAGE_STRUCT_ONLY
+
 #include <utils/Compat.h>
 #include <string>
 #include <vector>
@@ -34,6 +39,8 @@
 }
 
 #define unlikely(x)    __builtin_expect(!!(x), 0)
+
+#endif // INCLUDE_IMAGE_STRUCT_ONLY
 
 struct image {
     /* if true, decode file in place instead of creating a new output file */
@@ -77,6 +84,10 @@ struct image_proc_ctx {
     void *rs;
 };
 
+#ifndef INCLUDE_IMAGE_STRUCT_ONLY
+
+void file_image_load(const std::vector<int>& fds, image *ctx);
+
 extern bool image_load(const std::vector<std::string>& filename, image *ctx);
 extern bool image_save(const std::string& filename, image *ctx);
 
@@ -111,5 +122,7 @@ inline void image_set_interleaved_byte(uint64_t i, image *ctx,
         ctx->output[offset] = value;
     }
 }
+
+#endif // INCLUDE_IMAGE_STRUCT_ONLY
 
 #endif // __FEC_H__
