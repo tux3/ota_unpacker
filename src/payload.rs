@@ -134,7 +134,7 @@ impl<R: Read> Payload<R> {
             write_verity_hashtree(
                 out_guard.deref_mut(),
                 &self.manifest,
-                &part.hash_tree_algorithm.as_deref().unwrap_or("sha256"),
+                part.hash_tree_algorithm.as_deref().unwrap_or("sha256"),
                 salt.as_ref(),
                 data_extent,
                 hashtree_extent,

@@ -8,12 +8,12 @@ const SENTINEL_SPARSE_BLOCKS: u64 = u64::MAX;
 
 pub fn zero_extents<'a>(
     dst_extents: impl IntoIterator<Item = &'a Extent>,
-    mut dst: Arc<RwLock<File>>,
+    dst: Arc<RwLock<File>>,
     block_size: usize,
 ) -> Result<()> {
     for extent in dst_extents.into_iter() {
         let zeroes = vec![0u8; extent.num_blocks() as usize * block_size];
-        write_extent(&mut zeroes.as_slice(), extent, &mut dst, block_size)?;
+        write_extent(&mut zeroes.as_slice(), extent, &dst, block_size)?;
     }
     Ok(())
 }
@@ -21,11 +21,11 @@ pub fn zero_extents<'a>(
 pub fn write_extents<'a>(
     mut src: impl Read,
     dst_extents: impl IntoIterator<Item = &'a Extent>,
-    mut dst: Arc<RwLock<File>>,
+    dst: Arc<RwLock<File>>,
     block_size: usize,
 ) -> Result<()> {
     for extent in dst_extents.into_iter() {
-        write_extent(&mut src, extent, &mut dst, block_size)?;
+        write_extent(&mut src, extent, &dst, block_size)?;
     }
     Ok(())
 }
@@ -34,7 +34,7 @@ pub fn write_extents<'a>(
 pub fn write_extent(
     src: &mut impl Read,
     dst_extent: &Extent,
-    dst: &mut Arc<RwLock<File>>,
+    dst: &Arc<RwLock<File>>,
     block_size: usize,
 ) -> Result<()> {
     use std::os::unix::fs::FileExt;
@@ -61,7 +61,7 @@ pub fn write_extent(
 pub fn write_extent(
     mut src: &mut impl Read,
     dst_extent: &Extent,
-    dst: &mut Arc<RwLock<File>>,
+    dst: &Arc<RwLock<File>>,
     block_size: usize,
 ) -> Result<()> {
     use std::io::{Read, Seek, SeekFrom, Write};
@@ -86,7 +86,7 @@ pub fn copy_extents(
     src_extents: &[Extent],
     src: Arc<File>,
     dst_extents: &[Extent],
-    mut dst: Arc<RwLock<File>>,
+    dst: Arc<RwLock<File>>,
     block_size: usize,
 ) -> Result<()> {
     let src_blocks = src_extents
@@ -105,7 +105,7 @@ pub fn copy_extents(
 
     let mut to_write = data.as_slice();
     for extent in dst_extents {
-        write_extent(&mut to_write, extent, &mut dst, block_size)?;
+        write_extent(&mut to_write, extent, &dst, block_size)?;
     }
     Ok(())
 }
